@@ -19,8 +19,8 @@ set -uo pipefail
 DUREE="${DUREE:-600}"          # secondes par phase (600 = 10 min)
 PAS="${PAS:-10}"               # échantillonnage en secondes
 SEUIL_W="${SEUIL_W:-0.20}"     # gain minimal en watts pour garder le réglage
-BAT=/sys/class/power_supply/BAT0
-ASPM=/sys/module/pcie_aspm/parameters/policy
+BAT="${BAT:-/sys/class/power_supply/BAT0}"          # surchargeable pour les tests
+ASPM="${ASPM:-/sys/module/pcie_aspm/parameters/policy}" # surchargeable pour les tests
 TOPIC="${NTFY_TOPIC:-equipe-thierry-7f3c9a1e5b2d84c6}"
 SORTIE="$HOME/mesures-noyau/$(date +%Y%m%d-%H%M%S).txt"
 mkdir -p "$HOME/mesures-noyau"
@@ -45,7 +45,11 @@ echantillonner() { # $1 = libellé ; renvoie moyenne en W sur la sortie standard
 }
 
 etat_aspm() { cat "$ASPM" 2>/dev/null | tr -d '\n'; }
-erreurs_pcie() { dmesg 2>/dev/null | grep -ci -E 'AER|nvme.*reset|link down' || echo 0; }
+erreurs_pcie() { # renvoie un entier, ou "inconnu" si dmesg est illisible
+  local out
+  if ! out=$(dmesg 2>/dev/null); then printf 'inconnu'; return; fi
+  printf '%s' "$(printf '%s\n' "$out" | grep -ci -E 'AER|nvme.*reset|link down')"
+}
 
 log "=== mesure-gains-noyau $(date '+%d/%m/%Y %H:%M') ==="
 log "phase : $DUREE s, pas $PAS s, seuil $SEUIL_W W"
@@ -78,11 +82,15 @@ else
     GAIN=$(awk -v a="$P0" -v b="$P1" 'BEGIN{printf "%.3f", a-b}')
     log "gain = $GAIN W  (seuil $SEUIL_W W)"
     KEEP=$(awk -v g="$GAIN" -v s="$SEUIL_W" 'BEGIN{print (g>=s)?"1":"0"}')
-    if [ "$KEEP" = "1" ] && [ "$E1" -eq 0 ]; then
+    if [ "$KEEP" = "1" ] && [ "$E1" = "0" ]; then
       log "VERDICT : GARDE powersupersave (gain >= seuil, aucune erreur PCIe)"
       log "rendu permanent : echo powersupersave > $ASPM"
+    elif [ "$E1" = "inconnu" ]; then
+      log "VERDICT : REVERT (dmesg illisible : securite, pas de validation possible)"
+      echo performance > "$ASPM" 2>/dev/null
+      log "ASPM restaure : $(etat_aspm)"
     else
-      log "VERDICT : REVERT (gain insuffisant ou erreurs PCIe detectees)"
+      log "VERDICT : REVERT (gain insuffisant, ou $E1 erreur(s) PCIe detectee(s))"
       echo performance > "$ASPM" 2>/dev/null
       log "ASPM restaure : $(etat_aspm)"
     fi

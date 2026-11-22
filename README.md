@@ -68,3 +68,22 @@ Aucun gain de « +30 % partout » n'est démontré. Un noyau ne change pas le
 débit global ; BORE change l'ordre de passage sous charge (latence), et les
 réglages changent la consommation. Les chiffres viendront de la mesure,
 pas de ce README.
+
+## Journal des corrections
+
+**v1.1** — `erreurs_pcie()` renvoyait `"0\n0"` : `grep -c` écrit `0` sur stdout *et* sort en
+erreur, donc le `|| echo 0` ajoutait un second zéro. `[ "$E1" -eq 0 ]` échouait alors avec
+« integer expression expected », et le script concluait **REVERT même sans aucune erreur PCIe**.
+Corrigé : la fonction renvoie un entier propre, ou `inconnu` si `dmesg` est illisible ; le test
+compare des chaînes, et le cas `inconnu` déclenche un retour arrière par prudence.
+
+Trois cas vérifiés en simulation (fausse batterie, fausse politique ASPM, faux `dmesg`) :
+
+| Situation | Attendu | Obtenu |
+|---|---|---|
+| gain 0,45 W, 0 erreur AER | garder | **GARDE** |
+| gain 0,54 W, 1 erreur AER | revenir en arrière | **REVERT** |
+| `dmesg` illisible | revenir en arrière par prudence | **REVERT (dmesg illisible)** |
+
+**v1.2** — `BAT` et `ASPM` surchargeables par variable d'environnement, pour tester sans
+toucher au système.

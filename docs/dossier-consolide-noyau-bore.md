@@ -84,7 +84,7 @@ Rebuild de même version : **pkgrel distinct obligatoire**, ancien paquet conser
 | CPU | `intel_cpufreq` + `schedutil`, `intel_pstate=passive`, 2,69 GHz | conforme |
 
 **Gains prouvés à ce jour : aucun.** Le seul gain mesuré dans l'historique du projet est celui du
-noyau d'identité Android : **0 % de performance**, assumé — l'intérêt était l'identité dans `uname()`.
+noyau Android annoncé dans `uname` : **gain de performance non vérifié** — aucune mesure ne le prouve.
 
 ---
 
@@ -125,8 +125,9 @@ traçabilité non prouvée.
 | FreeLLMAPI | :3001 | **arrêté**, aucune clé |
 | Simular box | `cb-874e4cae480a`, 2 vCPU / 3,8 Go | réservé au navigateur |
 
-**Anomalie élucidée** : `uname` du poste annonce `5.10.198-android13` — c'est le noyau d'identité
-Android posé volontairement, pas un conteneur ni un incident.
+**Point non vérifié** : `uname` du poste annonce `5.10.198-android13`. Deux hypothèses se sont
+affrontées sans preuve (`/proc/1/comm` et `/proc/version` jamais relevés) : noyau d'identité Android
+posé volontairement, ou conteneur/changement d'amorçage. **À trancher par mesure**, pas par affirmation.
 
 ---
 
