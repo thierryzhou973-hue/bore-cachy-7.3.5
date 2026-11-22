@@ -1,5 +1,5 @@
---- sources-bore/tree/kernel/sched/fair.c	2026-11-23 02:14:18.568388000 +0800
-+++ /home/user/kernel-src/full/cachyos-7.3.5-2/kernel/sched/fair.c	2026-11-23 06:31:11.991029000 +0800
+--- a/kernel/sched/fair.c
++++ b/kernel/sched/fair.c
 @@ -1171,7 +1171,11 @@
  static inline void update_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
  {

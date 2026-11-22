@@ -116,3 +116,29 @@ echo $! > build.pid          # pour retrouver le processus
 
 puis sonder `build.log` / `build.pid` à intervalle régulier plutôt que d'attendre dans
 la session. Un build defconfig sur 2 vCPU prend de l'ordre d'une à plusieurs heures.
+
+## Correctif : testé en `patch -p1` (v1.1.1)
+
+La première version du correctif avait un en-tête non standard
+(`sources-bore/tree/...` + chemin absolu) : `patch -p1` ne la trouvait pas.
+Régénéré avec `diff -u --label a/... --label b/...`, puis **testé en chaîne** :
+
+```bash
+tar xzf cachyos-7.3.5-2.tar.gz -O cachyos-7.3.5-2/kernel/sched/fair.c > kernel/sched/fair.c   # vanilla
+patch -p1 < patchs/bore-fixed.patch              # hunk fair.c, 23 hunks
+patch -p1 < patchs/bore-correctif-fair.patch     # doit passer sans offset
+```
+
+Résultat mesuré : le `fair.c` obtenu est **identique octet pour octet** à celui
+qui a produit `built-in.a` et `bzImage` sur le build de contrôle.
+
+## Avertissement sur le bzImage produit en `defconfig`
+
+Un noyau compilé depuis `x86_64_defconfig` **démarre rarement sur une machine
+réelle** : il n'embarque ni le pilote NVMe, ni le système de fichiers racine, ni
+les firmwares attendus par le matériel. Il prouve la compilation, pas la
+bootabilité.
+
+Pour un noyau réellement démarrrable il faut la configuration du poste :
+`/boot/config-$(uname -r)` ou `zcat /proc/config.gz > .config`, puis
+`make olddefconfig` avant `make bzImage`.
