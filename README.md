@@ -87,3 +87,32 @@ Trois cas vérifiés en simulation (fausse batterie, fausse politique ASPM, faux
 
 **v1.2** — `BAT` et `ASPM` surchargeables par variable d'environnement, pour tester sans
 toucher au système.
+
+## Obtenir les sources
+
+Le tarball CachyOS 7.3.5-2 (258 Mo) n'est pas versionnable sur GitHub :
+
+```
+https://aka.doubaocdn.com/s/xI8Lo2AqiJ
+taille   : 269 820 095 octets
+sha256   : bb22ad99e1042fae883bab71366f8339367b74c045004fe92ad4923339092e07
+```
+
+Vérification avant usage :
+
+```bash
+sha256sum cachyos-7.3.5-2.tar.gz   # doit correspondre à la valeur ci-dessus
+```
+
+## Build dans un sandbox qui hiberne
+
+Les environnements d'exécution éphémères perdent un build noyau en cas d'inactivité.
+Pour que le build survive, il faut le détacher de la session :
+
+```bash
+nohup make -j"$(nproc)" bzImage > build.log 2>&1 &
+echo $! > build.pid          # pour retrouver le processus
+```
+
+puis sonder `build.log` / `build.pid` à intervalle régulier plutôt que d'attendre dans
+la session. Un build defconfig sur 2 vCPU prend de l'ordre d'une à plusieurs heures.
