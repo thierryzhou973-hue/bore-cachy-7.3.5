@@ -142,3 +142,42 @@ bootabilité.
 Pour un noyau réellement démarrrable il faut la configuration du poste :
 `/boot/config-$(uname -r)` ou `zcat /proc/config.gz > .config`, puis
 `make olddefconfig` avant `make bzImage`.
+
+## La configuration réelle (extraite du noyau officiel)
+
+`docs/config-cachyos-bore-7.3.5-2` n'est pas un defconfig : c'est la configuration
+**embarquée dans le `vmlinuz` officiel** de `linux-cachyos-bore 7.3.5-2`, récupérée
+par `scripts/extract-ikconfig` (CONFIG_IKCONFIG=y). 12 849 lignes.
+
+Elle diffère de `linux-cachyos` (noyau standard) par **exactement deux options** :
+
+```
+> CONFIG_SCHED_BORE=y
+> CONFIG_MIN_BASE_SLICE_NS=1600000      # 1,6 ms
+```
+
+Autres traits utiles : `CONFIG_CC_IS_GCC=y`, `CONFIG_GENERIC_CPU=y`,
+`CONFIG_PREEMPT=y`, `CONFIG_HZ=1000`, `CONFIG_NVME_CORE=m`, `CONFIG_BTRFS_FS=y`.
+
+Conséquence directe : **le noyau standard CachyOS n'a pas BORE.** Il n'y a rien à
+« optimiser » dans BORE sur ce noyau, puisque le code n'y est pas compilé.
+
+Pour un build maison démarrable :
+
+```bash
+cp docs/config-cachyos-bore-7.3.5-2 .config
+make olddefconfig
+make -j"$(nproc)" bzImage modules
+sudo make modules_install && sudo mkinitcpio -P
+```
+
+## Le plus court chemin : le paquet officiel
+
+CachyOS publie déjà ce noyau, signé :
+
+```bash
+sudo pacman -S linux-cachyos-bore     # ajoute une entrée de boot, rien à compiler
+```
+
+Noter que `CONFIG_NVME_CORE=m` : sans `modules` installés et sans initramfs régénéré,
+un `bzImage` seul ne démarrera pas.
