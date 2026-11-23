@@ -336,3 +336,115 @@ Les deux sont testables séparément ; **aucune mesure n'a pu être faite**, le 
 
 Deux modèles sur trois n'ont rien produit d'exploitable : `flint-40b-free` est revenu vide,
 `glm-5.3-flash-free` en erreur « Model is unavailable ». Le palier gratuit n'est pas homogène.
+
+## 15. État consolidé du projet (2026-11-23) — v2, remplace les sections antérieures en cas de contradiction
+
+Cette section remplace tout ce qui précède en cas de contradiction. Chaque ligne porte
+sa preuve ou sa mention **NON VÉRIFIÉ**.
+
+### 15.1 Objectif et dépôt
+
+Noyau CachyOS 7.3.5-2 + BORE pour un Lenovo V15 IGL (Celeron N4020, UHD 600), avec
+validation de démarrage **sans toucher l'entrée par défaut du bootloader**.
+
+- Dépôt : `github.com/thierryzhou973-hue/bore-cachy-7.3.5`
+- Sources : `cachyos-7.3.5-2.tar.gz`, 258 Mo, sha256 `bb22ad99…2e07` — conforme
+- Patch principal : 47/47 hunks
+- Correctif `fair.c` : appliqué manuellement dans le premier build (en-têtes non standards),
+  régénéré proprement au commit `c5fc4b2`, testé `patch -p1` jusqu'à identité octet pour octet
+- Script de mesure : corrigé au commit `11f16d2` (l'ancien concluait « REVERT » à tort)
+
+### 15.2 Matériel et options retenues
+
+N4020 : Goldmont Plus, 2C/2T, 1,1→2,8 GHz, 6 W, SSE4.2 / AES-NI / PCLMUL / CRC32 / SHA,
+**pas d'AVX**, pas de HT, pas de HWP. UHD 600 Gen9 (12 EU), 4–8 Go DDR4.
+
+`config-lenovo-v15-igl-n4020` : `X86_NATIVE_CPU=y` (`-march=goldmont-plus`),
+`NR_CPUS=8192→8`, `MAXSMP=n`, `LOCALVERSION="-lenovo-v15-igl"`.
+Déjà optimaux : BORE + `MIN_BASE_SLICE_NS=1600000`, `PREEMPT=y`, `HZ=1000`, schedutil,
+intel_idle, i915 en module, zram/zswap/BFQ. Runtime conseillé : `i915.enable_guc=2`
+(HuC seul ; `3` activerait une soumission GuC absente de Gen9), `compress=zstd:3` sur btrfs.
+ASPM : à mesurer avant activation. `CONFIG_RUST` et le patch d'identité Android 13 écartés.
+
+### 15.3 Accès distant
+
+- `ssh-bore-audit/` : bore.pub + ntfy (topic `equipe-thierry-…`, port 51736). 6 fichiers
+  audités : **2 bugs de sécurité élevés** (clé privée copiée jamais nettoyée dans `/tmp` ;
+  anti-brute-force inopérant, bore forwardant depuis `127.0.0.1` → IP source unique),
+  4 moyens/bas (regex au lieu de `grep -F`, `PermitRootLogin`, confinement factice,
+  topic devinable). Version corrigée livrée. Limite structurelle : relais public tiers.
+- `ssh-leger/` : dropbear (~200 Ko) + autossh vers VPS, modes `reverse`/`direct`,
+  systemd et clés épinglées.
+- **Le tunnel annoncé actif était faux** : port 51736 fermé, aucun ntfy depuis 2 h.
+  La config n'a pas été récupérée par ce chemin (elle l'a été par `extract-ikconfig`
+  sur le paquet officiel, voir 15.6).
+- Un token GitHub a transité par un chat : **à révoquer**.
+
+### 15.4 Build v1 — échec, cause réelle
+
+`bzImage` de 3,3 Mo issu d'un `x86_64_defconfig` (gcc 13.3) : 1 040 objets, **zéro**
+ext4/btrfs/nvme/usb_hcd. Non bootable. La config cible existait depuis 07:56 ; le build
+correct (`build3.log`, 19 170 objets) a été **interrompu** sur `BTF .tmp_vmlinux1`.
+Diagnostic correct : ce n'est pas la config qui manquait, c'est le build qui était périmé.
+
+Trois affirmations du rapport v1 corrigées : BORE bien compilé (27 symboles,
+`update_burst_cache` absent car `static inline`) ; non-bootabilité confirmée mais
+mal expliquée ; tunnel inexistant. Comparaison `bore.o` 24 648 / 14 872 octets :
+le build de contrôle était **gcc 11.4 + defconfig**, pas clang.
+
+### 15.5 Build v2 — livré et testé en QEMU
+
+Config correcte. Deux blocages franchis : `pahole` tué par l'OOM (conteneur limité à
+**8 Gio**, `vmlinux` à 1,1 Go avec DWARF/BTF) → `DEBUG_INFO_NONE=y` ; `zstd` absent
+(`Error 127`), installé. Piège `-march` évité : machine de build EPYC 9754 AVX-512,
+`KCFLAGS="-march=goldmont-plus -mtune=goldmont-plus"` appliqué après `KBUILD_CFLAGS` ;
+contrôle : aucune instruction AVX hors routines assembleur à sélection runtime.
+
+Preuve QEMU : noyau `7.3.5-lenovo-v15-igl`, `fs: ext4 btrfs`, `block: nvme0n1`,
+`sched_bore: 1`, **montage ext4 d'un fichier écrit hors VM** réussi, poweroff propre.
+Confirmé aussi en virtio (`vda`) et `xhci_hcd` détecté.
+`System.map` : 245 436 symboles (ext4 3 858, btrfs 5 140, nvme 1 306, usb_hcd 99,
+scsi 1 210, sd 222, ahci 242, tcp 2 396).
+
+### 15.6 Faits établis par extraction des paquets officiels (mesurés)
+
+- `scripts/extract-ikconfig` sur le `vmlinuz` officiel a rendu la config authentique
+  (`CONFIG_IKCONFIG=y`), 12 849 lignes : `docs/config-cachyos-bore-7.3.5-2` dans le dépôt.
+- **Le noyau `linux-cachyos` standard n'a pas BORE** ; `linux-cachyos-bore` l'a.
+  Différence entre les deux paquets : exactement `CONFIG_SCHED_BORE=y` et
+  `CONFIG_MIN_BASE_SLICE_NS=1600000`.
+- Config officielle : `CONFIG_NVME_CORE=m`, `CONFIG_CC_IS_GCC=y`, `CONFIG_GENERIC_CPU=y`,
+  `PREEMPT=y`, `HZ=1000`, `DEBUG_INFO_BTF=y`, `DEBUG_INFO_BTF_MODULES=y`,
+  `MODULE_SIG=y`, `MODULE_SIG_ALL=y`, `MODULE_SIG_KEY="certs/signing_key.pem"`.
+
+### 15.7 Risques non vérifiés à trancher avant installation
+
+1. **Secure Boot** — le build v2 signe ses 6 591 modules avec une clé jetable générée
+   localement, et le noyau lui-même n'est signé par aucune clé inscrite. Si Secure Boot
+   est actif, le boot échoue. Vérification : `mokutil --sb-state`. **NON VÉRIFIÉ.**
+2. **Boot réel sur le Lenovo** — QEMU ne valide ni i915 (UHD 600), ni ACPI de la machine,
+   ni trackpad I2C, ni audio, ni firmware. **NON VÉRIFIÉ** : aucun boot sur le matériel.
+3. **Perte de BTF** — au-delà de `bpftrace` CO-RE, `DEBUG_INFO_NONE` prive des
+   ordonnanceurs `scx_*`, donc de l'alternative à BORE pour la réactivité. Compromis
+   assumé, mais il empêche une comparaison A/B honnête.
+4. **Gain de performance ou d'autonomie** — **AUCUNE MESURE**. Le poste est resté éteint
+   (port 51736 fermé, ntfy muet). `outils/mesure-gains-noyau.sh` attend un PC allumé.
+
+### 15.8 Procédure d'installation sûre (non exécutée)
+
+```bash
+# 1. contrôle Secure Boot AVANT tout
+mokutil --sb-state
+
+# 2. noyau alternatif, sans écraser l'existant
+sudo make modules_install
+sudo cp arch/x86/boot/bzImage /boot/vmlinuz-linux-lenovo-v15-igl
+sudo mkinitcpio -k "$(make -s kernelrelease)" -g /boot/initramfs-linux-lenovo-v15-igl.img
+
+# 3. entrée de bootloader séparée, l'entrée par défaut reste intacte
+# 4. boot sur cette entrée, puis :
+sudo bash outils/mesure-gains-noyau.sh
+```
+
+Tant que l'étape 4 n'a pas produit deux séries de chiffres (P0 et P1), ce noyau reste
+une hypothèse compilée, pas un gain.
